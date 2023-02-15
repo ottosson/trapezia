@@ -1,4 +1,6 @@
-# thetc-auth
+# Trapezia
+
+Let the crab guard you.
 
 ## License
 

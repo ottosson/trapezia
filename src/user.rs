@@ -4,8 +4,7 @@ use async_trait::async_trait;
 use secrecy::Secret;
 
 use crate::{
-    password_strategy::Strategy,
-    session::SessionBackend,
+    strategy::password::Strategy,
     username::{Username, UsernameType},
 };
 

@@ -1,6 +1,6 @@
 pub mod appauth;
-pub mod password_strategy;
 pub mod session;
+pub mod strategy;
 pub mod user;
 pub mod username;
 

@@ -33,6 +33,6 @@ impl<T: UsernameType> Deref for Username<T> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &self.0
     }
 }

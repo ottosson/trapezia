@@ -3,10 +3,7 @@ use std::{convert::TryFrom, fmt::Display};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
-use crate::user::{User, UserId};
-
 pub mod memory;
-pub mod postgres;
 pub mod redis;
 
 #[nova::newtype(sqlx, serde, copy)]

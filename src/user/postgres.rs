@@ -2,18 +2,17 @@ use std::marker::PhantomData;
 
 use async_trait::async_trait;
 use secrecy::ExposeSecret;
-use sqlx::{Acquire, PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::{
-    password_strategy::Strategy,
     session::{PasswordResetId, SessionBackend, SessionManager},
+    strategy::password::Strategy,
     username::UsernameType,
-    util,
 };
 
-use super::{NewUser, PgUsers, User, UserBackend, UserBackendTransactional, UserId};
 #[cfg(feature = "deadpool")]
-use super::{DeadpoolPgUsers};
+use super::DeadpoolPgUsers;
+use super::{NewUser, PgUsers, User, UserBackend, UserBackendTransactional, UserId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -28,7 +27,7 @@ pub enum Error {
     Username(#[source] Box<dyn std::error::Error + Sync + Send>),
 
     #[error("password error")]
-    Password(#[from] crate::password_strategy::Error),
+    Password(#[from] crate::strategy::password::Error),
 
     #[error("The entered password was invalid.")]
     InvalidPassword,
@@ -74,7 +73,7 @@ impl<S: Strategy, U: UsernameType> DeadpoolBackend<S, U> {
 
 #[inline]
 async fn create_user<'a, S: Strategy, U: UsernameType>(
-    mut conn: &mut Transaction<'a, Postgres>,
+    conn: &mut Transaction<'a, Postgres>,
     strategy: &'a S,
     table_name: &'static str,
     user: NewUser<U>,
@@ -83,7 +82,7 @@ async fn create_user<'a, S: Strategy, U: UsernameType>(
     let user_id = match user.id {
         Some(id) => {
             database::insert_user_with_id(
-                &mut conn,
+                conn,
                 id,
                 user.username,
                 password_hash,
@@ -93,17 +92,10 @@ async fn create_user<'a, S: Strategy, U: UsernameType>(
             .await?
         }
         None => {
-            database::insert_user(
-                &mut conn,
-                user.username,
-                password_hash,
-                user.meta,
-                table_name,
-            )
-            .await?
+            database::insert_user(conn, user.username, password_hash, user.meta, table_name).await?
         }
     };
-    let user = database::find_user_by_id(&mut conn, user_id, table_name).await?;
+    let user = database::find_user_by_id(conn, user_id, table_name).await?;
     Ok(user)
 }
 
@@ -204,11 +196,13 @@ where
         password_reset_id: PasswordResetId,
         new_password: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let user_id = self.session_manager.verify_password_reset_id(password_reset_id).await?;
+        let user_id = self
+            .session_manager
+            .verify_password_reset_id(password_reset_id)
+            .await?;
         let user = self.users.find_user_by_id(user_id).await?;
         self.users.change_password(&user, new_password).await?;
-        self
-            .session_manager
+        self.session_manager
             .consume_password_reset_id(password_reset_id)
             .await?;
 
@@ -235,7 +229,10 @@ where
     St: Strategy,
     Ut: UsernameType,
 {
-    pub fn new(session_manager: SessionManager<T, Se, UserId, E>, users: DeadpoolPgUsers<St, Ut>) -> Self {
+    pub fn new(
+        session_manager: SessionManager<T, Se, UserId, E>,
+        users: DeadpoolPgUsers<St, Ut>,
+    ) -> Self {
         Self {
             session_manager,
             users,
@@ -247,11 +244,13 @@ where
         password_reset_id: PasswordResetId,
         new_password: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let user_id = self.session_manager.verify_password_reset_id(password_reset_id).await?;
+        let user_id = self
+            .session_manager
+            .verify_password_reset_id(password_reset_id)
+            .await?;
         let user = self.users.find_user_by_id(user_id).await?;
         self.users.change_password(&user, new_password).await?;
-        self
-            .session_manager
+        self.session_manager
             .consume_password_reset_id(password_reset_id)
             .await?;
 
@@ -392,7 +391,7 @@ mod database {
         password_hash: Secret<String>,
         table_name: &'static str,
     ) -> Result<(), sqlx::Error> {
-        let rec = sqlx::query(&format!(
+        let _rec = sqlx::query(&format!(
             r#"
                 UPDATE {} SET password_hash = $1 WHERE username = $2::text
                 RETURNING id;

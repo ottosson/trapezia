@@ -43,7 +43,7 @@ impl FromStr for AsciiUsername {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let value = value.trim();
 
-        if value.len() == 0 {
+        if value.is_empty() {
             return Err(TryIntoAsciiUsernameError::Empty);
         }
 

@@ -221,29 +221,4 @@ mod database {
 
         Ok(AppAuthId(rec.get(0)))
     }
-
-    pub async fn insert_app_auth_with_id(
-        conn: &mut PgConnection,
-        id: AppAuthId,
-        appauth: NewAppAuth,
-        table_name: &'static str,
-    ) -> Result<AppAuthId, sqlx::Error> {
-        let rec = sqlx::query(&format!(
-            r#"
-                INSERT INTO {}(id, name, description, token, meta, expires_at) VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING id;
-            "#,
-            table_name
-        ))
-        .bind(*id)
-        .bind(appauth.name)
-        .bind(appauth.description)
-        .bind(appauth.token.expose_secret())
-        .bind(appauth.meta)
-        .bind(appauth.expires_at)
-        .fetch_one(conn)
-        .await?;
-
-        Ok(AppAuthId(rec.get(0)))
-    }
 }

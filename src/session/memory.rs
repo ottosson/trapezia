@@ -58,7 +58,7 @@ impl<U: Clone + Send + Sync> super::SessionBackend for Backend<U> {
     async fn session(
         &self,
         id: SessionId,
-        extend_expiry: Option<DateTime<Utc>>,
+        _extend_expiry: Option<DateTime<Utc>>,
     ) -> Result<Self::Session, Self::Error> {
         let mut guard = self.sessions.write().unwrap();
         Ok(match guard.get(&id).cloned() {
@@ -80,7 +80,7 @@ impl<U: Clone + Send + Sync> super::SessionBackend for Backend<U> {
             let guard = self.sessions.read().unwrap();
             guard
                 .iter()
-                .filter(|(k, v)| Utc::now() >= v.expires_at)
+                .filter(|(_, v)| Utc::now() >= v.expires_at)
                 .map(|(k, _)| k)
                 .copied()
                 .collect::<Vec<_>>()
@@ -108,29 +108,29 @@ impl<U: Clone + Send + Sync> super::SessionBackend for Backend<U> {
         let mut guard = self.sessions.write().unwrap();
         let session = guard
             .get_mut(&session.id)
-            .ok_or_else(|| Error::NotFound(session.id))?;
+            .ok_or(Error::NotFound(session.id))?;
         session.expires_at = expires_at;
         Ok(session.clone())
     }
 
     async fn generate_password_reset_id(
         &self,
-        id: Self::UserId,
-        expires_at: DateTime<Utc>,
+        _id: Self::UserId,
+        _expires_at: DateTime<Utc>,
     ) -> Result<PasswordResetId, Self::Error> {
         todo!()
     }
 
     async fn verify_password_reset_id(
         &self,
-        id: PasswordResetId,
+        _id: PasswordResetId,
     ) -> Result<Self::UserId, Self::Error> {
         todo!()
     }
 
     async fn consume_password_reset_id(
         &self,
-        id: PasswordResetId,
+        _id: PasswordResetId,
     ) -> Result<Self::UserId, Self::Error> {
         todo!()
     }

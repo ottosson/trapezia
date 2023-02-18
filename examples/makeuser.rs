@@ -1,7 +1,7 @@
 use secrecy::ExposeSecret;
 use sqlx::PgPool;
 use trapezia::{
-    password_strategy::{Argon2idStrategy, Strategy},
+    strategy::password::{Argon2idStrategy, Strategy},
     user::{NewUser, UserBackend},
     username::ascii::AsciiUsername,
 };
@@ -14,7 +14,7 @@ async fn main() {
     let strategy = Argon2idStrategy::new("delicious pepper".as_bytes().to_vec(), 15, 2, 1).unwrap();
     let users = trapezia::user::PgUsers::<_, AsciiUsername>::new(pool, "users", strategy.clone());
 
-    let username = std::env::args().skip(1).next().unwrap();
+    let username = std::env::args().nth(1).unwrap();
 
     users
         .create_user(NewUser::new(&username, "password").unwrap())

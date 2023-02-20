@@ -157,46 +157,46 @@ where
         self.session(session.id, Some(expires_at)).await
     }
 
-    async fn generate_password_reset_id(
-        &self,
-        id: Self::UserId,
-        expires_at: DateTime<Utc>,
-    ) -> Result<PasswordResetId, Self::Error> {
-        let mut conn = self.pool.get().await?;
-        let password_reset_id = PasswordResetId::new();
+    // async fn generate_password_reset_id(
+    //     &self,
+    //     id: Self::UserId,
+    //     expires_at: DateTime<Utc>,
+    // ) -> Result<PasswordResetId, Self::Error> {
+    //     let mut conn = self.pool.get().await?;
+    //     let password_reset_id = PasswordResetId::new();
 
-        redis::cmd("SET")
-            .arg(format!("password-reset/{}", &*password_reset_id))
-            .arg(serde_json::to_string(&id).unwrap())
-            .arg("EXAT")
-            .arg(expires_at.timestamp())
-            .query_async(&mut conn)
-            .await?;
+    //     redis::cmd("SET")
+    //         .arg(format!("password-reset/{}", &*password_reset_id))
+    //         .arg(serde_json::to_string(&id).unwrap())
+    //         .arg("EXAT")
+    //         .arg(expires_at.timestamp())
+    //         .query_async(&mut conn)
+    //         .await?;
 
-        Ok(password_reset_id)
-    }
+    //     Ok(password_reset_id)
+    // }
 
-    async fn verify_password_reset_id(
-        &self,
-        id: PasswordResetId,
-    ) -> Result<Self::UserId, Self::Error> {
-        let mut conn = self.pool.get().await?;
-        let result: String = redis::cmd("GET")
-            .arg(format!("password-reset/{}", &*id))
-            .query_async(&mut conn)
-            .await?;
-        Ok(serde_json::from_str(&result)?)
-    }
+    // async fn verify_password_reset_id(
+    //     &self,
+    //     id: PasswordResetId,
+    // ) -> Result<Self::UserId, Self::Error> {
+    //     let mut conn = self.pool.get().await?;
+    //     let result: String = redis::cmd("GET")
+    //         .arg(format!("password-reset/{}", &*id))
+    //         .query_async(&mut conn)
+    //         .await?;
+    //     Ok(serde_json::from_str(&result)?)
+    // }
 
-    async fn consume_password_reset_id(
-        &self,
-        id: PasswordResetId,
-    ) -> Result<Self::UserId, Self::Error> {
-        let mut conn = self.pool.get().await?;
-        let result: String = redis::cmd("GETDEL")
-            .arg(format!("password-reset/{}", &*id))
-            .query_async(&mut conn)
-            .await?;
-        Ok(serde_json::from_str(&result)?)
-    }
+    // async fn consume_password_reset_id(
+    //     &self,
+    //     id: PasswordResetId,
+    // ) -> Result<Self::UserId, Self::Error> {
+    //     let mut conn = self.pool.get().await?;
+    //     let result: String = redis::cmd("GETDEL")
+    //         .arg(format!("password-reset/{}", &*id))
+    //         .query_async(&mut conn)
+    //         .await?;
+    //     Ok(serde_json::from_str(&result)?)
+    // }
 }

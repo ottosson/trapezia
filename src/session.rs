@@ -45,21 +45,21 @@ pub trait SessionBackend: Send + Sync {
         expires_at: DateTime<Utc>,
     ) -> Result<Self::Session, Self::Error>;
 
-    async fn generate_password_reset_id(
-        &self,
-        user_id: Self::UserId,
-        expires_at: DateTime<Utc>,
-    ) -> Result<PasswordResetId, Self::Error>;
+    // async fn generate_password_reset_id(
+    //     &self,
+    //     user_id: Self::UserId,
+    //     expires_at: DateTime<Utc>,
+    // ) -> Result<PasswordResetId, Self::Error>;
 
-    async fn consume_password_reset_id(
-        &self,
-        password_reset_id: PasswordResetId,
-    ) -> Result<Self::UserId, Self::Error>;
+    // async fn consume_password_reset_id(
+    //     &self,
+    //     password_reset_id: PasswordResetId,
+    // ) -> Result<Self::UserId, Self::Error>;
 
-    async fn verify_password_reset_id(
-        &self,
-        password_reset_id: PasswordResetId,
-    ) -> Result<Self::UserId, Self::Error>;
+    // async fn verify_password_reset_id(
+    //     &self,
+    //     password_reset_id: PasswordResetId,
+    // ) -> Result<Self::UserId, Self::Error>;
 
     // async fn reset_password(
     //     &self,
@@ -166,33 +166,33 @@ where
         self.backend.expire(session).await
     }
 
-    pub async fn generate_password_reset_id(
-        &self,
-        user_id: U,
-        expires_at: DateTime<Utc>,
-    ) -> Result<PasswordResetId, E> {
-        self.backend
-            .generate_password_reset_id(user_id, expires_at)
-            .await
-    }
+    // pub async fn generate_password_reset_id(
+    //     &self,
+    //     user_id: U,
+    //     expires_at: DateTime<Utc>,
+    // ) -> Result<PasswordResetId, E> {
+    //     self.backend
+    //         .generate_password_reset_id(user_id, expires_at)
+    //         .await
+    // }
 
-    pub async fn consume_password_reset_id(
-        &self,
-        password_reset_id: PasswordResetId,
-    ) -> Result<U, E> {
-        self.backend
-            .consume_password_reset_id(password_reset_id)
-            .await
-    }
+    // pub async fn consume_password_reset_id(
+    //     &self,
+    //     password_reset_id: PasswordResetId,
+    // ) -> Result<U, E> {
+    //     self.backend
+    //         .consume_password_reset_id(password_reset_id)
+    //         .await
+    // }
 
-    pub async fn verify_password_reset_id(
-        &self,
-        password_reset_id: PasswordResetId,
-    ) -> Result<U, E> {
-        self.backend
-            .verify_password_reset_id(password_reset_id)
-            .await
-    }
+    // pub async fn verify_password_reset_id(
+    //     &self,
+    //     password_reset_id: PasswordResetId,
+    // ) -> Result<U, E> {
+    //     self.backend
+    //         .verify_password_reset_id(password_reset_id)
+    //         .await
+    // }
 }
 
 #[cfg(test)]

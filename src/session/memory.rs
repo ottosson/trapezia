@@ -113,25 +113,25 @@ impl<U: Clone + Send + Sync> super::SessionBackend for Backend<U> {
         Ok(session.clone())
     }
 
-    async fn generate_password_reset_id(
-        &self,
-        _id: Self::UserId,
-        _expires_at: DateTime<Utc>,
-    ) -> Result<PasswordResetId, Self::Error> {
-        todo!()
-    }
+    // async fn generate_password_reset_id(
+    //     &self,
+    //     _id: Self::UserId,
+    //     _expires_at: DateTime<Utc>,
+    // ) -> Result<PasswordResetId, Self::Error> {
+    //     todo!()
+    // }
 
-    async fn verify_password_reset_id(
-        &self,
-        _id: PasswordResetId,
-    ) -> Result<Self::UserId, Self::Error> {
-        todo!()
-    }
+    // async fn verify_password_reset_id(
+    //     &self,
+    //     _id: PasswordResetId,
+    // ) -> Result<Self::UserId, Self::Error> {
+    //     todo!()
+    // }
 
-    async fn consume_password_reset_id(
-        &self,
-        _id: PasswordResetId,
-    ) -> Result<Self::UserId, Self::Error> {
-        todo!()
-    }
+    // async fn consume_password_reset_id(
+    //     &self,
+    //     _id: PasswordResetId,
+    // ) -> Result<Self::UserId, Self::Error> {
+    //     todo!()
+    // }
 }

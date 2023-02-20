@@ -23,7 +23,7 @@ impl Default for PasswordResetId {
 
 #[async_trait]
 pub trait SessionBackend: Send + Sync {
-    type Error: std::error::Error;
+    type Error: std::error::Error + Send + Sync + 'static;
     type Session;
     type UserId;
 

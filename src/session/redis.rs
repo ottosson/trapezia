@@ -22,7 +22,7 @@ pub struct SessionData<U> {
 }
 
 pub struct Backend<U: Clone> {
-    pool: deadpool_redis::Pool,
+    pub(crate) pool: deadpool_redis::Pool,
     _user_id: PhantomData<U>,
 }
 

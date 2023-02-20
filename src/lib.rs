@@ -4,6 +4,8 @@ pub mod strategy;
 pub mod user;
 pub mod username;
 
+pub(crate) const PREFIX: &str = "trapezia";
+
 pub use user::postgres::PgPasswordResetBackend;
 
 mod util;

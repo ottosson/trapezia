@@ -11,12 +11,43 @@ pub trait SendEmail {
     async fn send_email(&self, to_email: &str, url: &str) -> Result<(), Self::Error>;
 }
 
+pub struct Config<M: SendEmail, S: MagicLinkSession> {
+    pub mailer: M,
+    pub session_backend: S,
+    pub url_prefix: String,
+    pub link_expiry: Duration,
+    pub session_expiry: Duration,
+}
+
 pub struct MagicLinkStrategy<M: SendEmail, S: MagicLinkSession> {
     mailer: M,
     session_backend: S,
     url_prefix: String,
     link_expiry: Duration,
     session_expiry: Duration,
+}
+
+impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
+    pub fn new(config: Config<M, S>) -> Self {
+        let Config {
+            mailer,
+            session_backend,
+            mut url_prefix,
+            link_expiry,
+            session_expiry,
+        } = config;
+        if !url_prefix.ends_with("/") {
+            url_prefix = format!("{url_prefix}/");
+        }
+
+        Self {
+            mailer,
+            session_backend,
+            url_prefix,
+            link_expiry,
+            session_expiry,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -28,12 +59,7 @@ pub enum Error<M: SendEmail, S: MagicLinkSession> {
 }
 
 impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
-    pub async fn send_email(
-        &self,
-        user_id: &S::UserId,
-        to_email: &str,
-        url: &str,
-    ) -> Result<(), Error<M, S>> {
+    pub async fn send_email(&self, user_id: &S::UserId, to_email: &str) -> Result<(), Error<M, S>> {
         let link_expires_at = Utc::now() + self.link_expiry;
         let magic_link = self
             .session_backend
@@ -45,6 +71,7 @@ impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
             .send_email(to_email, &url)
             .await
             .map_err(Error::Email)?;
+        tracing::trace!(email=%to_email, token=%magic_link.token, url=%url, "Magic link");
         Ok(())
     }
 

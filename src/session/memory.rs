@@ -3,14 +3,12 @@ use std::{collections::HashMap, sync::RwLock};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
-use super::{PasswordResetId, SessionId};
-
-pub type SessionManager<U> = super::SessionManager<Backend<U>, Session<U>, U, Error>;
+use super::SessionId;
 
 #[derive(Debug, Clone)]
-pub struct Session<U: Clone> {
+pub struct Session<D: Clone> {
     pub id: SessionId,
-    pub user_id: U,
+    pub data: D,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -34,21 +32,21 @@ pub enum Error {
 }
 
 #[async_trait]
-impl<U: Clone + Send + Sync> super::SessionBackend for Backend<U> {
+impl<D: Clone + Send + Sync> super::SessionBackend for Backend<D> {
     type Error = Error;
-    type Session = Session<U>;
-    type UserId = U;
+    type Session = Session<D>;
+    type SessionData = D;
 
     async fn new_session(
         &self,
-        user_id: Self::UserId,
+        data: Self::SessionData,
         expires_at: DateTime<Utc>,
     ) -> Result<Self::Session, Self::Error> {
         let mut guard = self.sessions.write().unwrap();
         let id = SessionId::new();
         let session = Session {
             id,
-            user_id,
+            data,
             expires_at,
         };
         guard.insert(id, session.clone());

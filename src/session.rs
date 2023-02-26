@@ -25,11 +25,11 @@ impl Default for PasswordResetId {
 pub trait SessionBackend: Send + Sync {
     type Error: std::error::Error + Send + Sync + 'static;
     type Session;
-    type UserId;
+    type SessionData;
 
     async fn new_session(
         &self,
-        id: Self::UserId,
+        data: Self::SessionData,
         expires_at: DateTime<Utc>,
     ) -> Result<Self::Session, Self::Error>;
     async fn session(
@@ -44,29 +44,6 @@ pub trait SessionBackend: Send + Sync {
         session: Self::Session,
         expires_at: DateTime<Utc>,
     ) -> Result<Self::Session, Self::Error>;
-
-    // async fn generate_password_reset_id(
-    //     &self,
-    //     user_id: Self::UserId,
-    //     expires_at: DateTime<Utc>,
-    // ) -> Result<PasswordResetId, Self::Error>;
-
-    // async fn consume_password_reset_id(
-    //     &self,
-    //     password_reset_id: PasswordResetId,
-    // ) -> Result<Self::UserId, Self::Error>;
-
-    // async fn verify_password_reset_id(
-    //     &self,
-    //     password_reset_id: PasswordResetId,
-    // ) -> Result<Self::UserId, Self::Error>;
-
-    // async fn reset_password(
-    //     &self,
-    //     user_id: Self::UserId,
-    //     new_password: &str,
-    //     reset_password_id: PasswordResetId,
-    // ) -> Result<(), Self::Error>;
 }
 
 #[nova::newtype(sqlx, serde, copy)]
@@ -107,94 +84,6 @@ impl TryFrom<String> for SessionId {
     }
 }
 
-pub struct SessionManager<T, S, U, E>
-where
-    T: SessionBackend<Error = E, Session = S, UserId = U>,
-{
-    /// Session automatically refreshes expires_at date upon access.
-    auto_refresh: bool,
-
-    /// Duration before session expires.
-    alive_duration: chrono::Duration,
-
-    /// Session backend abstraction.
-    backend: T,
-}
-
-impl<T, S, U, E> SessionManager<T, S, U, E>
-where
-    E: std::error::Error,
-    T: SessionBackend<Error = E, Session = S, UserId = U>,
-{
-    pub fn new(auto_refresh: bool, alive_duration: chrono::Duration, backend: T) -> Self {
-        Self {
-            auto_refresh,
-            alive_duration,
-            backend,
-        }
-    }
-
-    #[inline]
-    pub async fn extend_expiry_date(&self, session: S) -> Result<S, E> {
-        let expires_at = Utc::now() + self.alive_duration;
-        self.backend.extend_expiry_date(session, expires_at).await
-    }
-
-    #[inline]
-    pub async fn new_session(&self, user_id: U) -> Result<S, E> {
-        let expires_at = Utc::now() + self.alive_duration;
-        self.backend.new_session(user_id, expires_at).await
-    }
-
-    #[inline]
-    pub async fn session(&self, session_id: SessionId) -> Result<S, E> {
-        let extend_expiry = match self.auto_refresh {
-            true => Some(Utc::now() + self.alive_duration),
-            false => None,
-        };
-
-        self.backend.session(session_id, extend_expiry).await
-    }
-
-    #[inline]
-    pub async fn clear_stale_sessions(&self) -> Result<(), E> {
-        self.backend.clear_stale_sessions().await
-    }
-
-    #[inline]
-    pub async fn expire(&self, session: S) -> Result<(), E> {
-        self.backend.expire(session).await
-    }
-
-    // pub async fn generate_password_reset_id(
-    //     &self,
-    //     user_id: U,
-    //     expires_at: DateTime<Utc>,
-    // ) -> Result<PasswordResetId, E> {
-    //     self.backend
-    //         .generate_password_reset_id(user_id, expires_at)
-    //         .await
-    // }
-
-    // pub async fn consume_password_reset_id(
-    //     &self,
-    //     password_reset_id: PasswordResetId,
-    // ) -> Result<U, E> {
-    //     self.backend
-    //         .consume_password_reset_id(password_reset_id)
-    //         .await
-    // }
-
-    // pub async fn verify_password_reset_id(
-    //     &self,
-    //     password_reset_id: PasswordResetId,
-    // ) -> Result<U, E> {
-    //     self.backend
-    //         .verify_password_reset_id(password_reset_id)
-    //         .await
-    // }
-}
-
 #[cfg(test)]
 mod tests {
     use chrono::Duration;
@@ -208,33 +97,5 @@ mod tests {
         fn random() -> Self {
             UserId(uuid::Uuid::new_v4())
         }
-    }
-
-    #[test]
-    fn memory() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-
-        rt.block_on(async move {
-            let handler =
-                memory::SessionManager::new(true, Duration::seconds(5), memory::Backend::default());
-            let user_id = UserId::random();
-            let session = handler.new_session(user_id).await.unwrap();
-            let _mm = handler.session(session.id).await.unwrap();
-        })
-    }
-
-    #[test]
-    fn memory_expired_session() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            let handler = memory::SessionManager::new(
-                true,
-                Duration::seconds(-1),
-                memory::Backend::default(),
-            );
-            let user_id = UserId::random();
-            let session = handler.new_session(user_id).await.unwrap();
-            assert!(handler.session(session.id).await.is_err())
-        });
     }
 }

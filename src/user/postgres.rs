@@ -5,7 +5,7 @@ use secrecy::ExposeSecret;
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::{
-    session::{PasswordResetId, SessionBackend, SessionManager},
+    session::{PasswordResetId, SessionBackend},
     strategy::password::Strategy,
     username::UsernameType,
 };
@@ -165,49 +165,6 @@ impl<S: Strategy, U: UsernameType> UserBackend<S, U> for Backend<S, U> {
         .await?;
         Ok(())
     }
-}
-
-pub struct PgPasswordResetBackend<T, St, Se, Ut, E>
-where
-    T: SessionBackend<Error = E, Session = Se, UserId = UserId>,
-    St: Strategy,
-    Ut: UsernameType,
-{
-    session_manager: SessionManager<T, Se, UserId, E>,
-    users: PgUsers<St, Ut>,
-}
-
-impl<T, St, Se, Ut, E> PgPasswordResetBackend<T, St, Se, Ut, E>
-where
-    E: std::error::Error + 'static,
-    T: SessionBackend<Error = E, Session = Se, UserId = UserId>,
-    St: Strategy,
-    Ut: UsernameType,
-{
-    pub fn new(session_manager: SessionManager<T, Se, UserId, E>, users: PgUsers<St, Ut>) -> Self {
-        Self {
-            session_manager,
-            users,
-        }
-    }
-
-    // pub async fn reset_password(
-    //     &self,
-    //     password_reset_id: PasswordResetId,
-    //     new_password: &str,
-    // ) -> Result<(), Box<dyn std::error::Error>> {
-    //     let user_id = self
-    //         .session_manager
-    //         .verify_password_reset_id(password_reset_id)
-    //         .await?;
-    //     let user = self.users.find_user_by_id(user_id).await?;
-    //     self.users.change_password(&user, new_password).await?;
-    //     self.session_manager
-    //         .consume_password_reset_id(password_reset_id)
-    //         .await?;
-
-    //     Ok(())
-    // }
 }
 
 #[cfg(feature = "deadpool")]

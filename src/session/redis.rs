@@ -3,27 +3,26 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use deadpool_redis::{Config, Runtime};
+use redis::RedisError;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{PasswordResetId, SessionId};
 
-pub type SessionManager<U> = super::SessionManager<Backend<U>, Session<U>, U, Error>;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Session<U: Clone> {
+pub struct Session<D: Clone> {
     pub id: SessionId,
-    pub data: SessionData<U>,
+    pub data: D,
     pub expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionData<U> {
-    pub user_id: U,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct SessionData<U> {
+//     pub user_id: U,
+// }
 
-pub struct Backend<U: Clone> {
+pub struct Backend<D: Clone> {
     pub(crate) pool: deadpool_redis::Pool,
-    _user_id: PhantomData<U>,
+    _data: PhantomData<D>,
 }
 
 impl<U: Clone> Backend<U> {
@@ -32,14 +31,14 @@ impl<U: Clone> Backend<U> {
         let pool = config.create_pool(Some(Runtime::Tokio1))?;
         Ok(Self {
             pool,
-            _user_id: PhantomData,
+            _data: PhantomData,
         })
     }
 
     pub fn with_pool(pool: deadpool_redis::Pool) -> Self {
         Self {
             pool,
-            _user_id: PhantomData,
+            _data: PhantomData,
         }
     }
 }
@@ -60,24 +59,24 @@ pub enum Error {
 }
 
 #[async_trait]
-impl<U> super::SessionBackend for Backend<U>
+impl<D> super::SessionBackend for Backend<D>
 where
-    U: Clone + Serialize + DeserializeOwned + Send + Sync,
+    D: Clone + Serialize + DeserializeOwned + Send + Sync,
 {
     type Error = Error;
-    type Session = Session<U>;
-    type UserId = U;
+    type Session = Session<D>;
+    type SessionData = D;
 
     async fn new_session(
         &self,
-        user_id: Self::UserId,
+        data: Self::SessionData,
         expires_at: DateTime<Utc>,
     ) -> Result<Self::Session, Self::Error> {
         let mut conn = self.pool.get().await?;
         let session_id = SessionId::new();
         let session = Session {
             id: session_id,
-            data: SessionData { user_id },
+            data,
             expires_at,
         };
         redis::cmd("SET")
@@ -156,47 +155,4 @@ where
     ) -> Result<Self::Session, Self::Error> {
         self.session(session.id, Some(expires_at)).await
     }
-
-    // async fn generate_password_reset_id(
-    //     &self,
-    //     id: Self::UserId,
-    //     expires_at: DateTime<Utc>,
-    // ) -> Result<PasswordResetId, Self::Error> {
-    //     let mut conn = self.pool.get().await?;
-    //     let password_reset_id = PasswordResetId::new();
-
-    //     redis::cmd("SET")
-    //         .arg(format!("password-reset/{}", &*password_reset_id))
-    //         .arg(serde_json::to_string(&id).unwrap())
-    //         .arg("EXAT")
-    //         .arg(expires_at.timestamp())
-    //         .query_async(&mut conn)
-    //         .await?;
-
-    //     Ok(password_reset_id)
-    // }
-
-    // async fn verify_password_reset_id(
-    //     &self,
-    //     id: PasswordResetId,
-    // ) -> Result<Self::UserId, Self::Error> {
-    //     let mut conn = self.pool.get().await?;
-    //     let result: String = redis::cmd("GET")
-    //         .arg(format!("password-reset/{}", &*id))
-    //         .query_async(&mut conn)
-    //         .await?;
-    //     Ok(serde_json::from_str(&result)?)
-    // }
-
-    // async fn consume_password_reset_id(
-    //     &self,
-    //     id: PasswordResetId,
-    // ) -> Result<Self::UserId, Self::Error> {
-    //     let mut conn = self.pool.get().await?;
-    //     let result: String = redis::cmd("GETDEL")
-    //         .arg(format!("password-reset/{}", &*id))
-    //         .query_async(&mut conn)
-    //         .await?;
-    //     Ok(serde_json::from_str(&result)?)
-    // }
 }

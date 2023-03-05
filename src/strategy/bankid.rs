@@ -1,13 +1,11 @@
 use async_trait::async_trait;
-use bankid::config::{CA_PROD, CA_TEST, P12_TEST};
-use bankid::model::Authenticate as AuthenticateResponse;
+use bankid::config::Config;
+use bankid::model::{
+    Authenticate as AuthenticateResponse, AuthenticatePayload, CancelPayload, Collect,
+};
 use bankid::{
     client::BankID,
-    config::{ConfigBuilder, Pkcs12},
-    model::{
-        AuthenticatePayloadBuilder, AuthenticatePayloadBuilderError, CollectPayload,
-        CompletionData, Status,
-    },
+    model::{CollectPayload, CompletionData},
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::de::DeserializeOwned;
@@ -40,14 +38,34 @@ pub struct BankIdAuthPayload {
     pub start_time: DateTime<Utc>,
 }
 
-impl From<AuthenticateResponse> for BankIdAuthPayload {
-    fn from(value: AuthenticateResponse) -> Self {
-        Self {
-            auto_start_token: value.auto_start_token,
-            order_ref: value.order_ref,
-            qr_start_token: value.qr_start_token,
-            qr_start_secret: value.qr_start_secret,
-            start_time: Utc::now(),
+pub struct AuthError {
+    error_code: String,
+    details: String,
+}
+
+impl TryFrom<AuthenticateResponse> for BankIdAuthPayload {
+    type Error = AuthError;
+    fn try_from(value: AuthenticateResponse) -> Result<Self, Self::Error> {
+        match value {
+            AuthenticateResponse::Success {
+                auto_start_token,
+                order_ref,
+                qr_start_token,
+                qr_start_secret,
+            } => Ok(Self {
+                auto_start_token,
+                order_ref,
+                qr_start_token,
+                qr_start_secret,
+                start_time: Utc::now(),
+            }),
+            AuthenticateResponse::Error {
+                error_code,
+                details,
+            } => Err(AuthError {
+                error_code,
+                details,
+            }),
         }
     }
 }
@@ -83,7 +101,7 @@ where
     }
 }
 
-fn generate_bankid_hmac(payload: &BankIdAuthPayload) -> Result<String, ()> {
+fn generate_bankid_hmac(payload: &BankIdAuthPayload) -> Result<String, Error> {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
     type HmacSha256 = Hmac<Sha256>;
@@ -99,7 +117,7 @@ fn generate_bankid_hmac(payload: &BankIdAuthPayload) -> Result<String, ()> {
     let qr_time = qr_time.num_seconds();
     if qr_time < 0 {
         // TODO: this is problematic and indicates the computer time changed.
-        return Err(());
+        return Err(Error::QrCodeTimeDrift);
     }
     let qr_time = qr_time.to_string();
 
@@ -116,11 +134,8 @@ pub enum Error {
     #[error("An invalid person number was provider")]
     InvalidPn,
 
-    #[error("An error occurred with BankID")]
-    BankId(#[from] bankid::error::Error),
-
-    #[error("Invalid input provided to authenticator")]
-    AuthenticationBuilder(#[from] AuthenticatePayloadBuilderError),
+    #[error("An error occurred with BankID: {0}")]
+    BankId(#[from] bankid::client::Error),
 
     #[error("Authentication failed")]
     Failed(String),
@@ -128,12 +143,24 @@ pub enum Error {
     #[error("Authentication timed out")]
     TimedOut,
 
+    #[error("Hint code is missing")]
+    MissingHintCode,
+
     #[error("The authentication succeeded but the completion data is missing")]
     MissingData,
+
+    #[error("No authentication payload found in session store")]
+    NoAuthPayload,
+
+    #[error("Storing payload in session store failed")]
+    StorePayloadFailed,
+
+    #[error("Time has drifted, invalidating the QR code.")]
+    QrCodeTimeDrift,
 }
 
-const BANKID_TEST_URL: &str = "https://appapi2.test.bankid.com/rp/v5.1";
-const BANKID_PROD_URL: &str = "https://appapi2.bankid.com/rp/v5.1";
+// const BANKID_TEST_URL: &str = "https://appapi2.test.bankid.com/rp/v5.1";
+// const BANKID_PROD_URL: &str = "https://appapi2.bankid.com/rp/v5.1";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StartAuthResponse {
@@ -141,44 +168,25 @@ pub struct StartAuthResponse {
     auto_start_token: String,
 }
 
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum PollCollectResponse {
+    Pending { hint_code: String },
+    Complete { completion_data: CompletionData },
+    Failed { hint_code: String },
+    Error { code: String, details: String },
+}
+
 impl<S> BankIdStrategy<S>
 where
     S: BankIdSession,
 {
-    pub fn new(session_backend: S, p12_data: Vec<u8>, password: &str) -> Self {
-        let pkcs12 = Pkcs12::Der {
-            der: p12_data,
-            password: password.to_string(),
-        };
-
-        let config = ConfigBuilder::default()
-            .pkcs12(pkcs12)
-            .url(BANKID_PROD_URL.to_string())
-            .ca(CA_PROD.to_string())
-            .build()
-            .unwrap();
+    pub fn new(session_backend: S, p12_data: &[u8], password: &str) -> Self {
+        let identity = bankid::config::Identity::from_pkcs12_der(&p12_data, password).unwrap();
+        let config = Config::prod(identity);
 
         Self {
-            client: BankID::new(config),
-            session_backend,
-        }
-    }
-
-    pub fn test(session_backend: S) -> Self {
-        let pkcs12 = Pkcs12::Der {
-            der: P12_TEST.to_vec(),
-            password: "qwerty123".to_string(),
-        };
-
-        let config = ConfigBuilder::default()
-            .pkcs12(pkcs12)
-            .url(BANKID_TEST_URL.to_string())
-            .ca(CA_TEST.to_string())
-            .build()
-            .unwrap();
-
-        Self {
-            client: BankID::new(config),
+            client: BankID::new(config).unwrap(),
             session_backend,
         }
     }
@@ -194,13 +202,20 @@ where
             return Err(Error::InvalidPn);
         }
 
-        let payload = AuthenticatePayloadBuilder::default()
-            .personal_number(pn)
-            .end_user_ip(ip_addr.to_string())
-            .build()?;
+        let payload = AuthenticatePayload {
+            personal_number: Some(pn),
+            end_user_ip: ip_addr.to_string(),
+            requirement: None,
+        };
 
-        let response: BankIdAuthPayload = self.client.authenticate(payload).await?.into();
-        self.session_backend.store_auth_payload(&response).await.map_err(|_| panic!());
+        let response: AuthenticateResponse = self.client.authenticate(payload).await?;
+        let response: BankIdAuthPayload = response
+            .try_into()
+            .map_err(|e: AuthError| Error::Failed(e.details))?;
+        self.session_backend
+            .store_auth_payload(&response)
+            .await
+            .map_err(|_| Error::StorePayloadFailed)?;
 
         Ok(StartAuthResponse {
             order_ref: response.order_ref,
@@ -209,31 +224,58 @@ where
     }
 
     pub async fn qr_code(&self, order_ref: &str) -> Result<String, Error> {
-        let payload = self.session_backend.auth_payload(order_ref).await.unwrap();
-        Ok(generate_bankid_hmac(&payload).unwrap())
+        let payload = self
+            .session_backend
+            .auth_payload(order_ref)
+            .await
+            .map_err(|_| Error::NoAuthPayload)?;
+        Ok(generate_bankid_hmac(&payload)?)
     }
 
-    pub async fn poll_authentication(&self, order_ref: &str) -> Result<CompletionData, Error> {
-        let collect = self
+    pub async fn poll_authentication(&self, order_ref: &str) -> Result<PollCollectResponse, Error> {
+        let result = self
             .client
-            .wait_collect(CollectPayload {
+            .collect(CollectPayload {
                 order_ref: order_ref.to_string(),
             })
-            .await?;
+            .await;
 
-        match collect.status {
-            Status::Pending => {
-                // We should never be able to get into this state, but alas...
-                Err(Error::TimedOut)
+        let collect = match result {
+            Ok(x) => x,
+            Err(e) => {
+                match &e {
+                    bankid::client::Error::InvalidJson(e, body) => {
+                        tracing::error!(error=%e, body=body, "error parsing collect payload");
+                    }
+                    bankid::client::Error::Http(e) => {
+                        tracing::error!(error=%e, "error parsing collect payload");
+                    }
+                }
+                return Err(e.into());
             }
-            Status::Failed => Err(Error::Failed(collect.hint_code)),
-            Status::Complete => {
-                let Some(data) = collect.completion_data else {
-                    return Err(Error::MissingData);
-                };
+        };
 
-                Ok(data)
+        match collect {
+            Collect::Pending { hint_code, .. } => Ok(PollCollectResponse::Pending { hint_code }),
+            Collect::Failed { hint_code, .. } => {
+                self.client
+                    .cancel(CancelPayload {
+                        order_ref: order_ref.to_string(),
+                    })
+                    .await?;
+
+                Ok(PollCollectResponse::Failed { hint_code })
             }
+            Collect::Complete {
+                completion_data, ..
+            } => Ok(PollCollectResponse::Complete { completion_data }),
+            Collect::Error {
+                error_code,
+                details,
+            } => Ok(PollCollectResponse::Error {
+                code: error_code,
+                details,
+            }),
         }
     }
 }

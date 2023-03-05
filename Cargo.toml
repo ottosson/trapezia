@@ -9,7 +9,7 @@ license = "Apache-2.0 OR MIT"
 [dependencies]
 argon2 = { version = "0.4.1", features = ["std"] }
 async-trait = "0.1.64"
-bankid = { git = "https://github.com/necessary-nu/bankid-rs", features = ["async", "native-tls"], optional = true }
+bankid = { git = "https://github.com/necessary-nu/bankid-rs", features = ["native-tls"], optional = true }
 chrono = { version = "0.4.23", features = ["serde"] }
 deadpool = { version = "0.9.5", features = ["rt_tokio_1"], optional = true } 
 deadpool-redis = "0.11.1"

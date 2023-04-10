@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use bankid::config::Config;
 use bankid::model::{
-    Authenticate as AuthenticateResponse, AuthenticatePayload, CancelPayload, Collect,
+    AuthenticatePayload, AuthenticateResponse, CancelPayload, CollectResponse, SignPayload,
+    SignResponse, UserVisibleDataFormat,
 };
 use bankid::{
     client::BankID,
@@ -60,6 +61,33 @@ impl TryFrom<AuthenticateResponse> for BankIdAuthPayload {
                 start_time: Utc::now(),
             }),
             AuthenticateResponse::Error {
+                error_code,
+                details,
+            } => Err(AuthError {
+                error_code,
+                details,
+            }),
+        }
+    }
+}
+
+impl TryFrom<SignResponse> for BankIdAuthPayload {
+    type Error = AuthError;
+    fn try_from(value: SignResponse) -> Result<Self, Self::Error> {
+        match value {
+            SignResponse::Success {
+                auto_start_token,
+                order_ref,
+                qr_start_token,
+                qr_start_secret,
+            } => Ok(Self {
+                auto_start_token,
+                order_ref,
+                qr_start_token,
+                qr_start_secret,
+                start_time: Utc::now(),
+            }),
+            SignResponse::Error {
                 error_code,
                 details,
             } => Err(AuthError {
@@ -159,9 +187,6 @@ pub enum Error {
     QrCodeTimeDrift,
 }
 
-// const BANKID_TEST_URL: &str = "https://appapi2.test.bankid.com/rp/v5.1";
-// const BANKID_PROD_URL: &str = "https://appapi2.bankid.com/rp/v5.1";
-
 #[derive(Debug, Clone, Serialize)]
 pub struct StartAuthResponse {
     order_ref: String,
@@ -189,6 +214,48 @@ where
             client: BankID::new(config).unwrap(),
             session_backend,
         }
+    }
+
+    pub async fn start_signing(
+        &self,
+        pn: &str,
+        user_visible_data: &str,
+        non_user_visible_data: &str,
+        ip_addr: std::net::IpAddr,
+    ) -> Result<StartAuthResponse, Error> {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+
+        // Remove dashes if they were put in the number
+        let pn = pn.replace("-", "");
+        if pn.len() != 12 {
+            return Err(Error::InvalidPn);
+        }
+
+        let user_visible_data = STANDARD.encode(user_visible_data);
+        let non_user_visible_data = STANDARD.encode(non_user_visible_data);
+
+        let payload = SignPayload {
+            personal_number: Some(pn),
+            end_user_ip: ip_addr.to_string(),
+            user_visible_data: user_visible_data,
+            user_non_visible_data: Some(non_user_visible_data),
+            user_visible_data_format: Some(UserVisibleDataFormat::SimpleMarkdownV1),
+            requirement: None,
+        };
+
+        let response: SignResponse = self.client.sign(payload).await?;
+        let response: BankIdAuthPayload = response
+            .try_into()
+            .map_err(|e: AuthError| Error::Failed(e.details))?;
+        self.session_backend
+            .store_auth_payload(&response)
+            .await
+            .map_err(|_| Error::StorePayloadFailed)?;
+
+        Ok(StartAuthResponse {
+            order_ref: response.order_ref,
+            auto_start_token: response.auto_start_token,
+        })
     }
 
     pub async fn start_authentication(
@@ -256,8 +323,10 @@ where
         };
 
         match collect {
-            Collect::Pending { hint_code, .. } => Ok(PollCollectResponse::Pending { hint_code }),
-            Collect::Failed { hint_code, .. } => {
+            CollectResponse::Pending { hint_code, .. } => {
+                Ok(PollCollectResponse::Pending { hint_code })
+            }
+            CollectResponse::Failed { hint_code, .. } => {
                 self.client
                     .cancel(CancelPayload {
                         order_ref: order_ref.to_string(),
@@ -266,10 +335,10 @@ where
 
                 Ok(PollCollectResponse::Failed { hint_code })
             }
-            Collect::Complete {
+            CollectResponse::Complete {
                 completion_data, ..
             } => Ok(PollCollectResponse::Complete { completion_data }),
-            Collect::Error {
+            CollectResponse::Error {
                 error_code,
                 details,
             } => Ok(PollCollectResponse::Error {

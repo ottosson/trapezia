@@ -56,6 +56,9 @@ pub enum Error {
 
     #[error("Session not found for given id {0}")]
     NotFound(SessionId),
+
+    #[error("An error occurred: {0}")]
+    Custom(String),
 }
 
 #[async_trait]

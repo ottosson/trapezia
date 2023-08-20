@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{session::SessionBackend, PREFIX};
+use crate::{session::{SessionBackend, self}, PREFIX};
 
 #[async_trait]
 pub trait SendEmail {
@@ -153,7 +153,7 @@ pub struct MagicLinkPayload<D> {
 }
 
 #[async_trait]
-impl<U> MagicLinkSession for crate::session::redis::Backend<U>
+impl<U> MagicLinkSession for session::redis::Backend<U>
 where
     U: Clone + Serialize + DeserializeOwned + Send + Sync,
 {
@@ -193,14 +193,19 @@ where
         identity_token: &str,
     ) -> Result<MagicLinkPayload<Self::MagicLinkData>, Self::Error> {
         let mut conn = self.pool.get().await?;
-        let result: String = redis::cmd("GET")
-            .arg(format!("{PREFIX}/magic-link/{identity_token}"))
+        let id_token_key = format!("{PREFIX}/magic-link/{identity_token}");
+        let result: Option<String> = redis::cmd("GET")
+            .arg(&id_token_key)
             .query_async(&mut conn)
             .await?;
+        let Some(result) = result else {
+            return Err(session::redis::Error::KeyNotFound(id_token_key));
+        };
+
         let magic_link_data: MagicLinkPayload<Self::MagicLinkData> = serde_json::from_str(&result)?;
 
         if magic_link_data.identity_key != *identity_key {
-            return Err(Self::Error::Custom("The magic link was not found".into()));
+            return Err(session::redis::Error::Custom("Identity keys do not match".into()));
         }
 
         Ok(magic_link_data)
@@ -215,11 +220,18 @@ where
         let mut conn = self.pool.get().await?;
 
         let magic_link_data = self.verify_magic_link(identity_key, identity_token).await?;
-
-        let _result: String = redis::cmd("GETDEL")
-            .arg(format!("{PREFIX}/magic-link/{identity_token}"))
+        let key = format!(
+            "{PREFIX}/magic-link/{identity_token}"
+        );
+        
+        let result: Option<String> = redis::cmd("GETDEL")
+            .arg(&key)
             .query_async(&mut conn)
             .await?;
+
+        if result.is_none() {
+            return Err(session::redis::Error::KeyNotFound(key));
+        }
 
         self.new_session(magic_link_data.data, session_expires_at)
             .await

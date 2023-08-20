@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use deadpool_redis::{Config, Runtime};
+use redis::FromRedisValue;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::SessionId;
@@ -14,11 +15,6 @@ pub struct Session<D: Clone> {
     pub data: D,
     pub expires_at: DateTime<Utc>,
 }
-
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct SessionData<U> {
-//     pub user_id: U,
-// }
 
 pub struct Backend<D: Clone> {
     pub(crate) pool: deadpool_redis::Pool,
@@ -54,11 +50,37 @@ pub enum Error {
     #[error("Json parsing error")]
     Json(#[from] serde_json::Error),
 
-    #[error("Session not found for given id {0}")]
-    NotFound(SessionId),
+    #[error("Key {0} not found")]
+    KeyNotFound(String),
+
+    #[error("Key {0} has missing TTL")]
+    MissingTtl(String),
 
     #[error("An error occurred: {0}")]
     Custom(String),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Ttl {
+    Seconds(u64),
+    NoExpiry,
+    NotFound,
+}
+
+impl From<i64> for Ttl {
+    fn from(value: i64) -> Self {
+        match value {
+            -2 => Ttl::NotFound,
+            -1 => Ttl::NoExpiry,
+            _ => Ttl::Seconds(value as u64),
+        }
+    }
+}
+
+impl FromRedisValue for Ttl {
+    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+        i64::from_redis_value(v).map(Ttl::from)
+    }
 }
 
 #[async_trait]
@@ -98,19 +120,18 @@ where
         extend_expiry: Option<DateTime<Utc>>,
     ) -> Result<Self::Session, Self::Error> {
         let mut conn = self.pool.get().await?;
+        let session_key = format!("{PREFIX}/session/{}", id);
 
-        // TODO: handle NotFound properly. Right now it's hidden in a RedisError.
-
-        let (session_data, ttl): (String, i64) = match extend_expiry {
+        let (session_data, ttl): (Option<String>, Ttl) = match extend_expiry {
             Some(expiry) => {
                 redis::pipe()
                     .atomic()
                     .cmd("GETEX")
-                    .arg(format!("{PREFIX}/session/{}", id))
+                    .arg(&session_key)
                     .arg("EXAT")
                     .arg(expiry.timestamp())
                     .cmd("TTL")
-                    .arg(format!("{PREFIX}/session/{}", id))
+                    .arg(&session_key)
                     .query_async(&mut conn)
                     .await?
             }
@@ -118,12 +139,22 @@ where
                 redis::pipe()
                     .atomic()
                     .cmd("GET")
-                    .arg(format!("{PREFIX}/session/{}", id))
+                    .arg(&session_key)
                     .cmd("TTL")
-                    .arg(format!("{PREFIX}/session/{}", id))
+                    .arg(&session_key)
                     .query_async(&mut conn)
                     .await?
             }
+        };
+
+        let ttl = match ttl {
+            Ttl::Seconds(ttl) => ttl,
+            Ttl::NoExpiry => return Err(Error::MissingTtl(session_key)),
+            Ttl::NotFound => return Err(Error::KeyNotFound(session_key)),
+        };
+
+        let Some(session_data) = session_data else {
+            return Err(Error::KeyNotFound(session_key));
         };
 
         let data = serde_json::from_str(&session_data)?;
@@ -131,7 +162,7 @@ where
         let session = Session {
             id,
             data,
-            expires_at: Utc::now() + Duration::seconds(ttl),
+            expires_at: Utc::now() + Duration::seconds(ttl.try_into().unwrap()),
         };
 
         Ok(session)

@@ -122,10 +122,14 @@ where
 
     async fn auth_payload(&self, order_ref: &str) -> Result<BankIdAuthPayload, Self::Error> {
         let mut conn = self.pool.get().await?;
-        let result: String = redis::cmd("GET")
-            .arg(format!("{PREFIX}/bankid/{order_ref}"))
+        let order_ref_key = format!("{PREFIX}/bankid/{order_ref}");
+        let result: Option<String> = redis::cmd("GET")
+            .arg(&order_ref_key)
             .query_async(&mut conn)
             .await?;
+        let Some(result) = result else {
+            return Err(crate::session::redis::Error::KeyNotFound(order_ref_key));
+        };
         let payload: BankIdAuthPayload = serde_json::from_str(&result)?;
         Ok(payload)
     }
@@ -208,14 +212,14 @@ impl<S> BankIdStrategy<S>
 where
     S: BankIdSession,
 {
-    pub fn new(session_backend: S, p12_data: &[u8], password: &str) -> Self {
-        let identity = bankid::config::Identity::from_pkcs12_der(p12_data, password).unwrap();
+    pub fn new(session_backend: S, pem_data: &[u8]) -> Result<Self, bankid::error::Error> {
+        let identity = bankid::config::Identity::from_pem(pem_data)?;
         let config = Config::prod(identity);
 
-        Self {
+        Ok(Self {
             client: BankID::new(config).unwrap(),
             session_backend,
-        }
+        })
     }
 
     pub async fn start_signing(

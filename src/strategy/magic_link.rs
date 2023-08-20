@@ -36,7 +36,7 @@ impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
             link_expiry,
             session_expiry,
         } = config;
-        if !url_prefix.ends_with("/") {
+        if !url_prefix.ends_with('/') {
             url_prefix = format!("{url_prefix}/");
         }
 

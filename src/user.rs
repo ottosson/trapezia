@@ -13,9 +13,6 @@ pub type UserId = uuid::Uuid;
 
 pub type PgUsers<S, U> = postgres::Backend<S, U>;
 
-#[cfg(feature = "deadpool")]
-pub type DeadpoolPgUsers<S, U> = postgres::DeadpoolBackend<S, U>;
-
 #[derive(Debug)]
 pub struct NewUser<U: UsernameType> {
     pub username: Username<U>,

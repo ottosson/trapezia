@@ -3,10 +3,10 @@ use std::marker::PhantomData;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use deadpool_redis::{Config, Runtime};
-use redis::RedisError;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{PasswordResetId, SessionId};
+use super::SessionId;
+use crate::PREFIX;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session<D: Clone> {
@@ -83,7 +83,7 @@ where
             expires_at,
         };
         redis::cmd("SET")
-            .arg(format!("session/{}", session_id))
+            .arg(format!("{PREFIX}/session/{}", session_id))
             .arg(serde_json::to_string(&session.data).unwrap())
             .arg("EXAT")
             .arg(expires_at.timestamp())
@@ -106,11 +106,11 @@ where
                 redis::pipe()
                     .atomic()
                     .cmd("GETEX")
-                    .arg(format!("session/{}", id))
+                    .arg(format!("{PREFIX}/session/{}", id))
                     .arg("EXAT")
                     .arg(expiry.timestamp())
                     .cmd("TTL")
-                    .arg(format!("session/{}", id))
+                    .arg(format!("{PREFIX}/session/{}", id))
                     .query_async(&mut conn)
                     .await?
             }
@@ -118,9 +118,9 @@ where
                 redis::pipe()
                     .atomic()
                     .cmd("GET")
-                    .arg(format!("session/{}", id))
+                    .arg(format!("{PREFIX}/session/{}", id))
                     .cmd("TTL")
-                    .arg(format!("session/{}", id))
+                    .arg(format!("{PREFIX}/session/{}", id))
                     .query_async(&mut conn)
                     .await?
             }
@@ -145,17 +145,9 @@ where
     async fn expire(&self, session: Self::Session) -> Result<(), Self::Error> {
         let mut conn = self.pool.get().await?;
         redis::cmd("DEL")
-            .arg(format!("session/{}", session.id))
+            .arg(format!("{PREFIX}/session/{}", session.id))
             .query_async(&mut conn)
             .await?;
         Ok(())
-    }
-
-    async fn extend_expiry_date(
-        &self,
-        session: Self::Session,
-        expires_at: DateTime<Utc>,
-    ) -> Result<Self::Session, Self::Error> {
-        self.session(session.id, Some(expires_at)).await
     }
 }

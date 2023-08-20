@@ -98,19 +98,6 @@ impl<D: Clone + Send + Sync> super::SessionBackend for Backend<D> {
         Ok(())
     }
 
-    async fn extend_expiry_date(
-        &self,
-        session: Self::Session,
-        expires_at: DateTime<Utc>,
-    ) -> Result<Self::Session, Self::Error> {
-        let mut guard = self.sessions.write().unwrap();
-        let session = guard
-            .get_mut(&session.id)
-            .ok_or(Error::NotFound(session.id))?;
-        session.expires_at = expires_at;
-        Ok(session.clone())
-    }
-
     // async fn generate_password_reset_id(
     //     &self,
     //     _id: Self::UserId,

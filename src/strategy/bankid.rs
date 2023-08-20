@@ -40,12 +40,13 @@ pub struct BankIdAuthPayload {
 }
 
 pub struct AuthError {
-    error_code: String,
-    details: String,
+    pub error_code: String,
+    pub details: String,
 }
 
 impl TryFrom<AuthenticateResponse> for BankIdAuthPayload {
     type Error = AuthError;
+
     fn try_from(value: AuthenticateResponse) -> Result<Self, Self::Error> {
         match value {
             AuthenticateResponse::Success {
@@ -73,6 +74,7 @@ impl TryFrom<AuthenticateResponse> for BankIdAuthPayload {
 
 impl TryFrom<SignResponse> for BankIdAuthPayload {
     type Error = AuthError;
+
     fn try_from(value: SignResponse) -> Result<Self, Self::Error> {
         match value {
             SignResponse::Success {
@@ -207,7 +209,7 @@ where
     S: BankIdSession,
 {
     pub fn new(session_backend: S, p12_data: &[u8], password: &str) -> Self {
-        let identity = bankid::config::Identity::from_pkcs12_der(&p12_data, password).unwrap();
+        let identity = bankid::config::Identity::from_pkcs12_der(p12_data, password).unwrap();
         let config = Config::prod(identity);
 
         Self {
@@ -226,7 +228,7 @@ where
         use base64::{engine::general_purpose::STANDARD, Engine};
 
         // Remove dashes if they were put in the number
-        let pn = pn.replace("-", "");
+        let pn = pn.replace('-', "");
         if pn.len() != 12 {
             return Err(Error::InvalidPn);
         }
@@ -237,7 +239,7 @@ where
         let payload = SignPayload {
             personal_number: Some(pn),
             end_user_ip: ip_addr.to_string(),
-            user_visible_data: user_visible_data,
+            user_visible_data,
             user_non_visible_data: Some(non_user_visible_data),
             user_visible_data_format: Some(UserVisibleDataFormat::SimpleMarkdownV1),
             requirement: None,
@@ -264,7 +266,7 @@ where
         ip_addr: std::net::IpAddr,
     ) -> Result<StartAuthResponse, Error> {
         // Remove dashes if they were put in the number
-        let pn = pn.replace("-", "");
+        let pn = pn.replace('-', "");
         if pn.len() != 12 {
             return Err(Error::InvalidPn);
         }
@@ -296,7 +298,7 @@ where
             .auth_payload(order_ref)
             .await
             .map_err(|_| Error::NoAuthPayload)?;
-        Ok(generate_bankid_hmac(&payload)?)
+        generate_bankid_hmac(&payload)
     }
 
     pub async fn poll_authentication(&self, order_ref: &str) -> Result<PollCollectResponse, Error> {

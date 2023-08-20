@@ -39,11 +39,6 @@ pub trait SessionBackend: Send + Sync {
     ) -> Result<Self::Session, Self::Error>;
     async fn clear_stale_sessions(&self) -> Result<(), Self::Error>;
     async fn expire(&self, session: Self::Session) -> Result<(), Self::Error>;
-    async fn extend_expiry_date(
-        &self,
-        session: Self::Session,
-        expires_at: DateTime<Utc>,
-    ) -> Result<Self::Session, Self::Error>;
 }
 
 #[nova::newtype(sqlx, serde, copy)]
@@ -81,21 +76,5 @@ impl TryFrom<String> for SessionId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         <SessionId as TryFrom<&str>>::try_from(&value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use chrono::Duration;
-
-    use super::*;
-
-    #[nova::newtype(copy)]
-    type UserId = uuid::Uuid;
-
-    impl UserId {
-        fn random() -> Self {
-            UserId(uuid::Uuid::new_v4())
-        }
     }
 }

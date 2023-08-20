@@ -119,7 +119,7 @@ impl Strategy for Argon2idStrategy {
         let salt = SaltString::generate(&mut rand::thread_rng());
 
         let result = argon2
-            .hash_password(input.as_bytes(), &Salt::try_from(salt.as_ref()).unwrap())
+            .hash_password(input.as_bytes(), Salt::try_from(salt.as_ref()).unwrap())
             .map_err(|e| Error::Strategy(Box::new(e)))?
             .to_string();
 

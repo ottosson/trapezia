@@ -12,6 +12,8 @@ use chrono::{DateTime, Duration, Utc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+pub use bankid;
+
 use crate::PREFIX;
 
 #[nova::newtype(serde)]

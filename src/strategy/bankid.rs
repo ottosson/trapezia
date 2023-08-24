@@ -4,15 +4,13 @@ use bankid::model::{
     AuthenticatePayload, AuthenticateResponse, CancelPayload, CollectResponse, SignPayload,
     SignResponse, UserVisibleDataFormat,
 };
-use bankid::{
-    client::BankID,
+pub use bankid::{
+    client::BankID, error::Error as BankIdError,
     model::{CollectPayload, CompletionData},
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-
-pub use bankid;
 
 use crate::PREFIX;
 

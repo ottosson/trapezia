@@ -5,7 +5,7 @@ use bankid::model::{
     SignResponse, UserVisibleDataFormat,
 };
 pub use bankid::{
-    client::BankID, error::Error as BankIdError,
+    client::BankID, client::Error as BankIdError,
     model::{CollectPayload, CompletionData},
 };
 use chrono::{DateTime, Duration, Utc};

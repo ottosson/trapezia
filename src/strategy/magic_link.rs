@@ -1,94 +1,67 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use rand::distributions::{Distribution, Uniform};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     session::{self, SessionBackend},
     PREFIX,
 };
 
-#[async_trait]
-pub trait SendEmail {
-    type Error: std::error::Error + Send + Sync + 'static;
-
-    async fn send_email(&self, to_email: &str, url: &str) -> Result<(), Self::Error>;
-}
-
-pub struct Config<M: SendEmail, S: MagicLinkSession> {
-    pub mailer: M,
+pub struct Config<S: MagicLinkSession, G: MagicLinkGenerator> {
     pub session_backend: S,
-    pub url_prefix: String,
+    pub link_generator: G,
     pub link_expiry: Duration,
     pub session_expiry: Duration,
 }
 
-pub struct MagicLinkStrategy<M: SendEmail, S: MagicLinkSession> {
-    mailer: M,
+pub struct MagicLinkStrategy<S: MagicLinkSession, G: MagicLinkGenerator> {
     session_backend: S,
-    url_prefix: String,
+    link_generator: G,
     link_expiry: Duration,
     session_expiry: Duration,
 }
 
-impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
-    pub fn new(config: Config<M, S>) -> Self {
+impl<S: MagicLinkSession, G: MagicLinkGenerator> MagicLinkStrategy<S, G> {
+    pub fn new(config: Config<S, G>) -> Self {
         let Config {
-            mailer,
             session_backend,
-            mut url_prefix,
+            link_generator,
             link_expiry,
             session_expiry,
         } = config;
-        if !url_prefix.ends_with('/') {
-            url_prefix = format!("{url_prefix}/");
-        }
 
         Self {
-            mailer,
             session_backend,
-            url_prefix,
+            link_generator,
             link_expiry,
             session_expiry,
         }
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error<M: SendEmail, S: MagicLinkSession> {
-    #[error("An error occurred sending magic link email")]
-    Email(#[source] M::Error),
-    #[error("An error occurred with the session backend")]
-    SessionBackend(#[source] S::Error),
-}
-
-impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
-    pub async fn send_email(
+impl<S: MagicLinkSession, G: MagicLinkGenerator> MagicLinkStrategy<S, G> {
+    pub async fn generate_magic_link(
         &self,
         data: &S::MagicLinkData,
-        to_email: &str,
-    ) -> Result<MagicLink, Error<M, S>> {
+    ) -> Result<MagicLink, S::Error> {
         let link_expires_at = Utc::now() + self.link_expiry;
-        let magic_link = self
-            .session_backend
-            .generate_magic_link(data, link_expires_at)
-            .await
-            .map_err(Error::SessionBackend)?;
-        let url = format!("{}{}", self.url_prefix, magic_link.identity_token);
-        self.mailer
-            .send_email(to_email, &url)
-            .await
-            .map_err(Error::Email)?;
-        tracing::trace!(email=%to_email, token=%magic_link.identity_token, url=%url, "Magic link");
+        let magic_link = self.link_generator.random();
+        self.session_backend
+            .store_magic_link(&magic_link, data, link_expires_at)
+            .await?;
         Ok(magic_link)
     }
 
-    pub async fn verify_token(
+    pub async fn verify_magic_link(
         &self,
         identity_key: &str,
-        identity_token: &str,
+        identity_secret: &str,
     ) -> Result<bool, S::Error> {
-        let result = self.session_backend
-            .verify_magic_link(identity_key, identity_token)
+        let result = self
+            .session_backend
+            .verify_magic_link(identity_key, identity_secret)
             .await?;
         Ok(result.is_some())
     }
@@ -96,32 +69,51 @@ impl<M: SendEmail, S: MagicLinkSession> MagicLinkStrategy<M, S> {
     pub async fn create_session(
         &self,
         identity_key: &str,
-        identity_token: &str,
+        identity_secret: &str,
     ) -> Result<Option<S::Session>, S::Error> {
         let session_expires_at = Utc::now() + self.session_expiry;
         self.session_backend
-            .consume_magic_link(identity_key, identity_token, session_expires_at)
+            .consume_magic_link(identity_key, identity_secret, session_expires_at)
             .await
     }
 }
 
 pub struct MagicLink {
+    pub identity_secret: String,
     pub identity_key: String,
-    pub identity_token: String,
 }
 
-impl MagicLink {
-    pub fn new() -> Self {
-        Self {
-            identity_key: uuid::Uuid::new_v4().as_simple().to_string(),
-            identity_token: uuid::Uuid::new_v4().as_simple().to_string(),
+pub trait MagicLinkGenerator {
+    fn random(&self) -> MagicLink;
+}
+
+pub struct UuidSecret;
+
+impl MagicLinkGenerator for UuidSecret {
+    fn random(&self) -> MagicLink {
+        MagicLink {
+            identity_secret: Uuid::new_v4().as_simple().to_string(),
+            identity_key: Uuid::new_v4().as_simple().to_string(),
         }
     }
 }
 
-impl Default for MagicLink {
-    fn default() -> Self {
-        Self::new()
+pub struct NumericSecret;
+
+impl MagicLinkGenerator for NumericSecret {
+    fn random(&self) -> MagicLink {
+        let between = Uniform::from(0..=9);
+        let mut rng = rand::thread_rng();
+        let mut secret = String::with_capacity(8);
+        for _ in 0..8 {
+            let v = between.sample(&mut rng);
+            secret.push_str(&v.to_string());
+        }
+
+        MagicLink {
+            identity_secret: secret,
+            identity_key: Uuid::new_v4().as_simple().to_string(),
+        }
     }
 }
 
@@ -129,28 +121,30 @@ impl Default for MagicLink {
 pub trait MagicLinkSession: SessionBackend {
     type MagicLinkData;
 
-    async fn generate_magic_link(
+    async fn store_magic_link(
         &self,
+        magic_link: &MagicLink,
         data: &Self::MagicLinkData,
         expires_at: DateTime<Utc>,
-    ) -> Result<MagicLink, Self::Error>;
+    ) -> Result<(), Self::Error>;
 
     async fn verify_magic_link(
         &self,
         identity_key: &str,
-        identity_token: &str,
+        identity_secret: &str,
     ) -> Result<Option<MagicLinkPayload<Self::MagicLinkData>>, Self::Error>;
 
     async fn consume_magic_link(
         &self,
         identity_key: &str,
-        identity_token: &str,
+        identity_secret: &str,
         session_expires_at: DateTime<Utc>,
     ) -> Result<Option<Self::Session>, Self::Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MagicLinkPayload<D> {
+    identity_secret: String,
     identity_key: String,
     data: D,
 }
@@ -162,21 +156,19 @@ where
 {
     type MagicLinkData = Self::SessionData;
 
-    async fn generate_magic_link(
+    async fn store_magic_link(
         &self,
+        magic_link: &MagicLink,
         data: &Self::MagicLinkData,
         expires_at: DateTime<Utc>,
-    ) -> Result<MagicLink, Self::Error> {
+    ) -> Result<(), Self::Error> {
         let mut conn = self.pool.get().await?;
-        let magic_link = MagicLink::new();
 
         redis::cmd("SET")
-            .arg(format!(
-                "{PREFIX}/magic-link/{}",
-                &magic_link.identity_token
-            ))
+            .arg(format!("{PREFIX}/magic-link/{}", &magic_link.identity_key))
             .arg(
                 serde_json::to_string(&MagicLinkPayload {
+                    identity_secret: magic_link.identity_secret.clone(),
                     identity_key: magic_link.identity_key.clone(),
                     data: data.clone(),
                 })
@@ -187,16 +179,16 @@ where
             .query_async(&mut conn)
             .await?;
 
-        Ok(magic_link)
+        Ok(())
     }
 
     async fn verify_magic_link(
         &self,
         identity_key: &str,
-        identity_token: &str,
+        identity_secret: &str,
     ) -> Result<Option<MagicLinkPayload<Self::MagicLinkData>>, Self::Error> {
         let mut conn = self.pool.get().await?;
-        let id_token_key = format!("{PREFIX}/magic-link/{identity_token}");
+        let id_token_key = format!("{PREFIX}/magic-link/{identity_key}");
         let result: Option<String> = redis::cmd("GET")
             .arg(&id_token_key)
             .query_async(&mut conn)
@@ -206,6 +198,12 @@ where
         };
 
         let magic_link_data: MagicLinkPayload<Self::MagicLinkData> = serde_json::from_str(&result)?;
+
+        if magic_link_data.identity_secret != *identity_secret {
+            return Err(session::redis::Error::Custom(
+                "Identity secrets do not match".into(),
+            ));
+        }
 
         if magic_link_data.identity_key != *identity_key {
             return Err(session::redis::Error::Custom(
@@ -219,17 +217,20 @@ where
     async fn consume_magic_link(
         &self,
         identity_key: &str,
-        identity_token: &str,
+        identity_secret: &str,
         session_expires_at: DateTime<Utc>,
     ) -> Result<Option<Self::Session>, Self::Error> {
         let mut conn = self.pool.get().await?;
 
-        let magic_link_data = match self.verify_magic_link(identity_key, identity_token).await? {
+        let magic_link_data = match self
+            .verify_magic_link(identity_key, identity_secret)
+            .await?
+        {
             Some(v) => v,
             None => return Ok(None),
         };
 
-        let key = format!("{PREFIX}/magic-link/{identity_token}");
+        let key = format!("{PREFIX}/magic-link/{identity_key}");
 
         let result: Option<String> = redis::cmd("GETDEL")
             .arg(&key)

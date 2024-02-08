@@ -92,9 +92,9 @@ impl<D: Clone + Send + Sync> super::SessionBackend for Backend<D> {
         Ok(())
     }
 
-    async fn expire(&self, session: Self::Session) -> Result<(), Self::Error> {
+    async fn expire(&self, session: SessionId) -> Result<(), Self::Error> {
         let mut guard = self.sessions.write().unwrap();
-        guard.remove(&session.id);
+        guard.remove(&session);
         Ok(())
     }
 

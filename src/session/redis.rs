@@ -173,10 +173,10 @@ where
         Ok(())
     }
 
-    async fn expire(&self, session: Self::Session) -> Result<(), Self::Error> {
+    async fn expire(&self, session: SessionId) -> Result<(), Self::Error> {
         let mut conn = self.pool.get().await?;
         redis::cmd("DEL")
-            .arg(format!("{PREFIX}/session/{}", session.id))
+            .arg(format!("{PREFIX}/session/{}", session))
             .query_async(&mut conn)
             .await?;
         Ok(())

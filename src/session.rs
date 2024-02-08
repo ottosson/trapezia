@@ -38,7 +38,7 @@ pub trait SessionBackend: Send + Sync {
         extend_expiry: Option<DateTime<Utc>>,
     ) -> Result<Self::Session, Self::Error>;
     async fn clear_stale_sessions(&self) -> Result<(), Self::Error>;
-    async fn expire(&self, session: Self::Session) -> Result<(), Self::Error>;
+    async fn expire(&self, session: SessionId) -> Result<(), Self::Error>;
 }
 
 #[nova::newtype(sqlx, serde, copy)]

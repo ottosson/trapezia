@@ -2,6 +2,7 @@ use std::{convert::TryFrom, fmt::Display};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 pub mod memory;
 pub mod redis;
@@ -68,6 +69,12 @@ impl TryFrom<&str> for SessionId {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let uuid = uuid::Uuid::parse_str(value)?;
         Ok(Self(uuid))
+    }
+}
+
+impl From<Uuid> for SessionId {
+    fn from(value: Uuid) -> Self {
+        Self(value)
     }
 }
 

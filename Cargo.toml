@@ -10,13 +10,13 @@ license = "Apache-2.0 OR MIT"
 argon2 = { version = "0.5.1", features = ["std"] }
 async-trait = "0.1.64"
 bankid = { git = "https://github.com/necessary-nu/bankid-rs", optional = true }
-base64 = "0.21.0"
+base64 = "0.22.0"
 chrono = { version = "0.4.23", features = ["serde"] }
-deadpool-redis = "0.12"
+deadpool-redis = "0.14.0"
 hmac = { version = "0.12.1", features = ["std"] }
 nova = "0.5.4"
 rand = "0.8.5"
-redis = { version = "0.23.2", features = ["tokio-comp"] }
+redis = { version = "0.24.0", features = ["tokio-comp"] }
 secrecy = "0.8.0"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"

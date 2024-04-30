@@ -225,24 +225,16 @@ where
 
     pub async fn start_signing(
         &self,
-        pn: &str,
         user_visible_data: &str,
         non_user_visible_data: &str,
         ip_addr: std::net::IpAddr,
     ) -> Result<StartAuthResponse, Error> {
         use base64::{engine::general_purpose::STANDARD, Engine};
 
-        // Remove dashes if they were put in the number
-        let pn = pn.replace('-', "");
-        if pn.len() != 12 {
-            return Err(Error::InvalidPn);
-        }
-
         let user_visible_data = STANDARD.encode(user_visible_data);
         let non_user_visible_data = STANDARD.encode(non_user_visible_data);
 
         let payload = SignPayload {
-            personal_number: Some(pn),
             end_user_ip: ip_addr.to_string(),
             user_visible_data,
             user_non_visible_data: Some(non_user_visible_data),
@@ -267,17 +259,9 @@ where
 
     pub async fn start_authentication(
         &self,
-        pn: &str,
         ip_addr: std::net::IpAddr,
     ) -> Result<StartAuthResponse, Error> {
-        // Remove dashes if they were put in the number
-        let pn = pn.replace('-', "");
-        if pn.len() != 12 {
-            return Err(Error::InvalidPn);
-        }
-
         let payload = AuthenticatePayload {
-            personal_number: Some(pn),
             end_user_ip: ip_addr.to_string(),
             requirement: None,
         };

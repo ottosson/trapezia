@@ -196,8 +196,8 @@ pub enum Error {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StartAuthResponse {
-    order_ref: String,
-    auto_start_token: String,
+    pub order_ref: String,
+    pub auto_start_token: String,
 }
 
 #[derive(Debug, serde::Serialize)]

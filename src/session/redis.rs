@@ -109,7 +109,7 @@ where
             .arg(serde_json::to_string(&session.data).unwrap())
             .arg("EXAT")
             .arg(expires_at.timestamp())
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
         Ok(session)
     }
@@ -177,7 +177,7 @@ where
         let mut conn = self.pool.get().await?;
         redis::cmd("DEL")
             .arg(format!("{PREFIX}/session/{}", session))
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
         Ok(())
     }

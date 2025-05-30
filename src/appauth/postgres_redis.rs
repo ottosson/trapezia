@@ -55,7 +55,7 @@ async fn set_redis_token(
         q = q.arg("EXAT").arg(expiry.timestamp());
     }
 
-    q.query_async(&mut conn).await?;
+    q.query_async::<()>(&mut conn).await?;
 
     Ok(())
 }

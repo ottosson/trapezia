@@ -116,7 +116,7 @@ where
             .arg(serde_json::to_string(&payload).unwrap())
             .arg("EXAT")
             .arg(expires_at.timestamp())
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
         Ok(())
     }

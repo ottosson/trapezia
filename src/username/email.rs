@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, fmt::Display, hash::Hash, ops::Deref, str::FromStr};
 
-use validator::validate_email;
+use validator::ValidateEmail;
 
 use super::{Username, UsernameType};
 
@@ -49,7 +49,7 @@ impl FromStr for EmailUsername {
             return Err(TryIntoEmailUsernameError::UsernameTooLong);
         }
 
-        if !validate_email(value) {
+        if !value.validate_email() {
             return Err(TryIntoEmailUsernameError::NotValidEmail);
         }
 

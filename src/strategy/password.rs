@@ -4,10 +4,10 @@ use argon2::{
     password_hash::{Salt, SaltString},
     Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier,
 };
-use secrecy::Secret;
+use secrecy::SecretString;
 
 pub trait Strategy: Send + Sync {
-    fn generate_password_hash(&self, input: &str) -> Result<Secret<String>, Error>;
+    fn generate_password_hash(&self, input: &str) -> Result<SecretString, Error>;
     fn verify_password(&self, hash: &str, input: &str) -> Result<bool, Error>;
 }
 
@@ -110,7 +110,7 @@ pub mod argon2id {
 }
 
 impl Strategy for Argon2idStrategy {
-    fn generate_password_hash(&self, input: &str) -> Result<Secret<String>, Error> {
+    fn generate_password_hash(&self, input: &str) -> Result<SecretString, Error> {
         if input.len() < 8 {
             return Err(Error::PasswordTooShort);
         }
@@ -123,7 +123,7 @@ impl Strategy for Argon2idStrategy {
             .map_err(|e| Error::Strategy(Box::new(e)))?
             .to_string();
 
-        Ok(Secret::new(result))
+        Ok(SecretString::new(result.into_boxed_str()))
     }
 
     fn verify_password(&self, hash: &str, input: &str) -> Result<bool, Error> {

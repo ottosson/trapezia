@@ -1,7 +1,7 @@
 pub(crate) mod postgres;
 
 use async_trait::async_trait;
-use secrecy::Secret;
+use secrecy::SecretString;
 
 use crate::{
     strategy::password::Strategy,
@@ -16,7 +16,7 @@ pub type PgUsers<S, U> = postgres::Backend<S, U>;
 #[derive(Debug)]
 pub struct NewUser<U: UsernameType> {
     pub username: Username<U>,
-    pub password: Secret<String>,
+    pub password: SecretString,
     pub meta: serde_json::Value,
     pub id: Option<UserId>,
 }
@@ -25,7 +25,7 @@ impl<U: UsernameType> NewUser<U> {
     pub fn new(username: &str, password: &str) -> Result<Self, U::Err> {
         Ok(Self {
             username: username.parse()?,
-            password: Secret::new(password.to_string()),
+            password: SecretString::new(password.into()),
             meta: Default::default(),
             id: None,
         })
@@ -34,7 +34,7 @@ impl<U: UsernameType> NewUser<U> {
     pub fn with_id(id: UserId, username: &str, password: &str) -> Result<Self, U::Err> {
         Ok(Self {
             username: username.parse()?,
-            password: Secret::new(password.to_string()),
+            password: SecretString::new(password.into()),
             meta: Default::default(),
             id: Some(id),
         })
@@ -45,7 +45,7 @@ impl<U: UsernameType> NewUser<U> {
 pub struct User<U: UsernameType> {
     pub id: UserId,
     pub username: Username<U>,
-    pub password_hash: Secret<String>,
+    pub password_hash: SecretString,
     pub meta: serde_json::Value,
 }
 
@@ -61,7 +61,7 @@ impl<U: UsernameType> User<U> {
         Ok(Self {
             id,
             username,
-            password_hash: Secret::new(password_hash),
+            password_hash: SecretString::new(password_hash.into()),
             meta: meta.unwrap_or(serde_json::Value::Null),
         })
     }

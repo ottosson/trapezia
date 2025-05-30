@@ -99,7 +99,7 @@ impl super::AppAuthBackend for Backend {
 }
 
 mod database {
-    use secrecy::{ExposeSecret, Secret};
+    use secrecy::{ExposeSecret, SecretString};
     use sqlx::{PgConnection, Row};
 
     use crate::appauth::{AppAuth, AppAuthId, NewAppAuth};
@@ -123,7 +123,7 @@ mod database {
             id: r.get(0),
             name: r.get(1),
             description: r.get(2),
-            token: Secret::new(r.get(3)),
+            token: SecretString::new(r.get(3)),
             meta: r.get(4),
             expires_at: r.get(5),
         })

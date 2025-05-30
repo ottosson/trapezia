@@ -2,7 +2,7 @@ pub mod postgres_redis;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use secrecy::Secret;
+use secrecy::SecretString;
 
 #[nova::newtype(serde, sqlx, copy, new)]
 pub type AppAuthId = uuid::Uuid;
@@ -11,7 +11,7 @@ pub type AppAuthId = uuid::Uuid;
 pub struct NewAppAuth {
     pub name: String,
     pub description: Option<String>,
-    pub token: Secret<String>,
+    pub token: SecretString,
     pub meta: serde_json::Value,
     pub expires_at: Option<DateTime<Utc>>,
 }
@@ -21,7 +21,7 @@ pub struct AppAuth {
     pub id: AppAuthId,
     pub name: String,
     pub description: Option<String>,
-    pub token: Secret<String>,
+    pub token: SecretString,
     pub meta: serde_json::Value,
     pub expires_at: Option<DateTime<Utc>>,
 }

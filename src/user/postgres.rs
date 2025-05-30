@@ -138,7 +138,7 @@ impl<S: Strategy, U: UsernameType> UserBackend<S, U> for Backend<S, U> {
 }
 
 mod database {
-    use secrecy::{ExposeSecret, Secret};
+    use secrecy::{ExposeSecret, SecretString};
     use sqlx::{PgConnection, Row};
 
     use crate::username::{Username, UsernameType};
@@ -149,7 +149,7 @@ mod database {
         conn: &mut PgConnection,
         id: UserId,
         username: Username<U>,
-        password_hash: Secret<String>,
+        password_hash: SecretString,
         meta: serde_json::Value,
         table_name: &'static str,
     ) -> Result<UserId, sqlx::Error> {
@@ -173,7 +173,7 @@ mod database {
     pub async fn insert_user<U: UsernameType>(
         conn: &mut PgConnection,
         username: Username<U>,
-        password_hash: Secret<String>,
+        password_hash: SecretString,
         meta: serde_json::Value,
         table_name: &'static str,
     ) -> Result<UserId, sqlx::Error> {
@@ -196,7 +196,7 @@ mod database {
     pub async fn set_password<U: UsernameType>(
         conn: &mut PgConnection,
         username: Username<U>,
-        password_hash: Secret<String>,
+        password_hash: SecretString,
         table_name: &'static str,
     ) -> Result<(), sqlx::Error> {
         let _rec = sqlx::query(&format!(
@@ -245,7 +245,7 @@ mod database {
         Ok(User {
             id: r.get(0),
             username,
-            password_hash: Secret::new(r.get(2)),
+            password_hash: SecretString::new(r.get(2)),
             meta: r.get(3),
         })
     }
@@ -281,7 +281,7 @@ mod database {
         Ok(User {
             id: r.get(0),
             username,
-            password_hash: Secret::new(r.get(2)),
+            password_hash: SecretString::new(r.get(2)),
             meta: r.get(3),
         })
     }
@@ -315,7 +315,7 @@ mod database {
                 Ok(User {
                     id: r.get(0),
                     username,
-                    password_hash: Secret::new(r.get(2)),
+                    password_hash: SecretString::new(r.get(2)),
                     meta: r.get(3),
                 })
             })
